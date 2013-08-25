@@ -1,0 +1,122 @@
+---------------------------------------- Renaming Types -----------------------------------
+type Variable  	= String
+type Value 	= Integer
+type Program 	= Stmt
+type State 	= [(Variable,Value)]
+
+------------------------------------------ Data Types -------------------------------------  
+data Expr = 	 Plus 	Expr Expr
+	       	|Minus 	Expr Expr
+		|Mult 	Expr Expr
+		|Div 	Expr Expr
+		|Var 	Variable
+		|Const 	Value
+
+			deriving Show
+
+data CondExpr =  Lt 	Expr Expr
+		|Lte 	Expr Expr
+		|Gt 	Expr Expr
+		|Gte 	Expr Expr
+		|Eq 	Expr Expr
+		|Neq 	Expr Expr
+		|And 	CondExpr CondExpr
+		|Or 	CondExpr CondExpr
+		|Neg 	CondExpr
+			
+			deriving Show
+
+data Stmt = 	 Asgn 	Variable Expr
+		|If 	CondExpr Stmt Stmt
+		|While 	CondExpr Stmt
+		|Print 	Expr
+		|Read 	Variable
+		|Seq 	Stmt Stmt
+
+			deriving Show
+
+----------------------------------------- Functions ---------------------------------------
+
+locate :: Variable -> State -> Value
+locate v [] = error "Variable Not Found"
+locate v ((var,val):xs) | v==var    = val
+			| otherwise = locate v xs
+
+
+update :: Variable -> Value -> State -> State
+update var val [] = [(var,val)]
+update var val ((vr,vl):xs) 	|(var==vr) = ((var,val):xs) 
+				|otherwise = [(vr,vl)]++(update var val xs)
+
+
+evalExpr :: Expr -> State -> Value
+evalExpr (Const val) 	st  = val
+evalExpr (Var var)      st = locate var st
+evalExpr (Mult 	e1 e2)  st = (evalExpr e1 st) *     (evalExpr e2 st) 
+evalExpr (Minus e1 e2) 	st = (evalExpr e1 st) -     (evalExpr e2 st) 
+evalExpr (Plus 	e1 e2)  st = (evalExpr e1 st) +     (evalExpr e2 st) 
+evalExpr (Div	e1 e2)	st = (evalExpr e1 st) `div` (evalExpr e2 st)
+-- (if we use (a/b) instead of (a`div`b) then a and b has to be float (always better to use -- `div`  -(Note: `div` is for division between integers)-) 
+
+evalCondExpr :: CondExpr -> State -> Bool
+evalCondExpr (And ce1 ce2) st =  (evalCondExpr ce1 st) && (evalCondExpr ce2 st)
+evalCondExpr (Or  ce1 ce2) st =  (evalCondExpr ce1 st) || (evalCondExpr ce2 st)
+evalCondExpr (Neg ce1) 	   st =  		       not(evalCondExpr ce1 st)
+evalCondExpr (Lt  ce1 ce2) st =  (evalExpr ce1 st) <  (evalExpr ce2 st)
+evalCondExpr (Lte ce1 ce2) st =  (evalExpr ce1 st) <= (evalExpr ce2 st)
+evalCondExpr (Gt  ce1 ce2) st =  (evalExpr ce1 st) >  (evalExpr ce2 st)
+evalCondExpr (Gte ce1 ce2) st =  (evalExpr ce1 st) >= (evalExpr ce2 st)
+evalCondExpr (Eq  ce1 ce2) st =  (evalExpr ce1 st) == (evalExpr ce2 st)
+evalCondExpr (Neq ce1 ce2) st =  (evalExpr ce1 st) /= (evalExpr ce2 st)
+
+
+evalStmt :: Stmt -> State -> IO State
+evalStmt (Read var)          	st = do 
+					c <- getLine
+					return (update var (read c::Integer) st) 			
+
+evalStmt (Print e)   		st = do
+					print (evalExpr e st)
+					return st
+
+evalStmt (Seq stmt1 stmt2)   	st = do 
+					ls <- evalStmt stmt1 st
+					evalStmt stmt2 ls
+					
+evalStmt (Asgn var e) 	     	st = return (update var (evalExpr e st) st)   
+					
+evalStmt (If ce stmt1 stmt2) 	st = if (evalCondExpr ce st) 	then (evalStmt stmt1 st)
+								else (evalStmt stmt2 st)
+
+evalStmt (While ce stmt)     	st = if (evalCondExpr ce st) 
+					then do 
+						ls <- evalStmt stmt st
+						evalStmt (While ce stmt) ls 								else (return st)
+
+
+evalProgram :: Program -> State -> IO State
+evalProgram s st 		= evalStmt s st
+evalProgram (s1`Seq`s2) st 	= do 
+				   	ls <- evalStmt s1 st
+					evalProgram s2 ls
+				   					     
+-----------------------------------------Test Run------------------------------------------
+
+--To run the program Write at the prompt ------ evalProgram fact [] -----------------------
+
+fact = 	(Read "n") `Seq` 
+		(Asgn "fact" (Const 1)) `Seq`
+		(While (Gt (Var "n") (Const 0))
+			((Asgn "fact" (Mult (Var "fact") (Var "n"))) `Seq`
+			(Asgn "n" (Minus (Var "n") (Const 1))))
+		) `Seq`
+		(Print (Var "fact"))
+
+------------------------------------------------------------------------------------------- 
+
+
+
+
+
+
+
